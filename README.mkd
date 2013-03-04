@@ -14,4 +14,6 @@ Requirements
 Todo
 ----
 
+ * Figure out why decryptedPrivateKeySpec is padded.
+ * Figure out why data is padded.
  * Make it not-terrible.
