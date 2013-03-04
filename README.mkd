@@ -14,4 +14,4 @@ Requirements
 Todo
 ----
 
- * [ ] Make it not-terrible.
+ * Make it not-terrible.
