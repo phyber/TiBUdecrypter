@@ -87,7 +87,7 @@ class TiBUFile:
 		IV = ''.ljust(16, chr(0x00))
 		dec = Crypto.Cipher.AES.new(key, mode=Crypto.Cipher.AES.MODE_CBC, IV=IV)
 		decrypted = dec.decrypt(data)
-		return self.pkcs5_unpad(decrypted)
+		return self.pkcs5Unpad(decrypted)
 
 	def checkHeader(self):
 		headerLen = len(self.__VALID_HEADER)
@@ -136,7 +136,7 @@ class TiBUFile:
 				'encryptedData':		encryptedData
 				}
 
-	def pkcs5_unpad(self, data):
+	def pkcs5Unpad(self, data):
 		unpad = lambda d: d[0:-ord(d[-1])]
 		return unpad(data)
 
