@@ -94,7 +94,12 @@ class TiBUFile:
 		IV is 16 bytes of 0x00 as specified by Titanium.
 		Performs PKCS5 unpadding when required.
 		"""
-		pkcs5_unpad = lambda d: d[0:-ord(d[-1])]
+		if sys.version_info[0] < 3:
+			compat = ord
+		else:
+			compat = int
+
+		pkcs5_unpad = lambda d: d[0:-compat(d[-1])]
 		iv = 16 * chr(0x00)
 		dec = Crypto.Cipher.AES.new(
 				key,
@@ -109,8 +114,8 @@ class TiBUFile:
 		raises the InvalidHeader exception if there is no match.
 		"""
 		header_len = len(self._VALID_HEADER)
-		with open(self.filename) as f:
-			data = f.read(header_len)
+		with open(self.filename, 'rb') as f:
+			data = f.read(header_len).decode('utf-8')
 
 		if not (len(data) == header_len
 			and data == self._VALID_HEADER):
@@ -123,12 +128,12 @@ class TiBUFile:
 		"""
 		mac = hmac.new(
 				self.filepart['pass_hmac_key'],
-				password,
+				bytes(password),
 				hashlib.sha1)
 		if mac.digest() == self.filepart['pass_hmac_result']:
 			sha1 = hashlib.sha1()
 			sha1.update(password)
-			self.hashed_pass = sha1.digest().ljust(32, chr(0x00))
+			self.hashed_pass = sha1.digest().ljust(32, bytes(chr(0x00).encode('ascii')))
 		else:
 			raise PasswordMismatchError('Password Mismatch')
 
@@ -162,11 +167,11 @@ class TiBUFile:
 		we're interested in.
 		"""
 		try:
-			with open(self.filename, 'r') as f:
+			with open(self.filename, 'rb') as f:
 				(header, pass_hmac_key,
 				pass_hmac_result, public_key,
 				enc_privkey_spec, enc_sesskey_spec,
-				enc_data) = f.read().split('\n', 6)
+				enc_data) = f.read().split(b'\n', 6)
 		except:
 			raise
 
@@ -195,7 +200,7 @@ def main(args):
 
 	try:
 		password = getpass.getpass()
-		encrypted_file.check_password(password)
+		encrypted_file.check_password(bytes(password.encode('utf-8')))
 	except PasswordMismatchError as e:
 		return "Error: {e}".format(e=e)
 
@@ -204,7 +209,7 @@ def main(args):
 	try:
 		decrypted_filename = "decrypted-{filename}".format(
 				filename = os.path.basename(filename))
-		with open(decrypted_filename, 'w') as f:
+		with open(decrypted_filename, 'wb') as f:
 			f.write(decrypted_file)
 	except IOError as e:
 		return "Error while writing decrypted data: {e}".format(
