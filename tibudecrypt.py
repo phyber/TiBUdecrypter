@@ -97,7 +97,8 @@ class TiBUFile:
 		with open(self.filename) as f:
 			bytes = f.read(headerLen)
 
-		if not (len(bytes) == headerLen and bytes == self._VALID_HEADER):
+		if not (len(bytes) == headerLen
+			and bytes == self._VALID_HEADER):
 			raise InvalidHeader('Invalid header')
 
 	def check_password(self, password):
@@ -171,7 +172,7 @@ def main(ARGV):
 	try:
 		encryptedFile = TiBUFile(filename)
 	except InvalidHeader as e:
-		return "Error. Not a Titanium Backup encrypted file: {e}".format(e=e)
+		return "Not a Titanium Backup encrypted file: {e}".format(e=e)
 	except IOError as e:
 		return "Error. {e}".format(e=e)
 
@@ -189,7 +190,7 @@ def main(ARGV):
 		with open(decryptedFilename, 'w') as f:
 			f.write(decryptedFile)
 	except IOError as e:
-		return "Error while attempting to write decrypted file: {e}".format(e=e)
+		return "Error while writing decrypted data: {e}".format(e=e)
 
 	print("Success. Decrypted file '{decryptedFilename}' written.".format(
 		decryptedFilename=decryptedFilename))
