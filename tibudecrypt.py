@@ -4,27 +4,27 @@
 # https://plus.google.com/101760059763010172705/posts/MQBmYhKDex5
 #=====
 # "TB_ARMOR_V1" '\n'
-# passphraseHmacKey '\n'
-# passphraseHmacResult '\n'
+# passHmacKey '\n'
+# passHmacResult '\n'
 # publicKey '\n'
-# encryptedPrivateKey '\n'
-# encryptedSessionKey '\n'
+# encPrivKeySpec '\n'
+# encSessionKey '\n'
 # Data
 #=====
-# Each of the 5 "variables" (passphraseHmacKey, passphraseHmacResult,
-# publicKey, encryptedPrivateKey, encryptedSessionKey) is stored in
+# Each of the 5 "variables" (passHmacKey, passHmacResult,
+# publicKey, encPrivKeySpec, encSessionKey) is stored in
 # Base64 format without linewraps (of course) and can be decoded with:
-# Base64.decode( passphraseHmacKey, Base64.NO_WRAP)
+# Base64.decode( passHmacKey, Base64.NO_WRAP)
 #
 # Then the user-supplied passphrase (String) can be verified as follows:
 # Mac mac = Mac.getInstance("HmacSHA1");
-# mac.init(new SecretKeySpec(passphraseHmacKey, "HmacSHA1"));
+# mac.init(new SecretKeySpec(passHmacKey, "HmacSHA1"));
 # byte[] sigBytes = mac.doFinal(passphrase.getBytes("UTF-8"));
-# boolean passphraseMatches = Arrays.equals(sigBytes, passphraseHmacResult);
+# boolean passphraseMatches = Arrays.equals(sigBytes, passHmacResult);
 #
 # Then the passphrase is independently hashed with SHA-1. We append 0x00 bytes
 # to the 160-bit result to constitute the 256-bit AES key which is used to
-# decrypt "encryptedPrivateKey" (with an IV of 0x00 bytes).
+# decrypt "encPrivKeySpec" (with an IV of 0x00 bytes).
 #
 #Then we build the KeyPair object as follows:
 # KeyFactory keyFactory = KeyFactory.getInstance("RSA");
@@ -37,7 +37,7 @@
 # rsaDecrypt.init(Cipher.DECRYPT_MODE, keyPair.getPrivate()); 
 # ByteArrayOutputStream baos = new ByteArrayOutputStream();
 # CipherOutputStream cos = new CipherOutputStream(baos, rsaDecrypt);
-# cos.write(encryptedSessionKey); cos.close();
+# cos.write(encSessionKey); cos.close();
 # byte[] sessionKey = baos.toByteArray();
 #
 # And finally, we decrypt the data itself with the session key (which can be
@@ -65,84 +65,100 @@ import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 
 class InvalidHeader(Exception):
-	def __init__(self, message):
-		self.message = message
-	def __str__(self):
-		return self.message
+	"""
+	Raised when the header for a file doesn't match a valid
+	Titanium Backup header.
+	"""
 
-class PasswordMismatch(Exception):
-	def __init__(self, message):
-		self.message = message
-	def __str__(self):
-		return self.message
+class PasswordMismatchError(Exception):
+	"""
+	Raised when the given password is incorrect
+	(hmac digest doesn't match expected digest)
+	"""
 
 class TiBUFile:
 	def __init__(self, filename):
-		self.__VALID_HEADER = 'TB_ARMOR_V1'
+		self._VALID_HEADER = 'TB_ARMOR_V1'
 		self.filename = filename
-		self.checkHeader()
-		self.readFile()
+		self.check_header()
+		self.read_file()
 
-	def aesDecrypt(self, key, data):
+	def aes_decrypt(self, key, data):
 		IV = ''.ljust(16, chr(0x00))
-		dec = Crypto.Cipher.AES.new(key, mode=Crypto.Cipher.AES.MODE_CBC, IV=IV)
+		dec = Crypto.Cipher.AES.new(
+				key,
+				mode=Crypto.Cipher.AES.MODE_CBC,
+				IV=IV)
 		decrypted = dec.decrypt(data)
-		return self.pkcs5Unpad(decrypted)
+		return self.pkcs5_unpad(decrypted)
 
-	def checkHeader(self):
-		headerLen = len(self.__VALID_HEADER)
+	def check_header(self):
+		headerLen = len(self._VALID_HEADER)
 		with open(self.filename) as f:
 			bytes = f.read(headerLen)
 
-		if not (len(bytes) == headerLen and bytes == self.__VALID_HEADER):
+		if not (len(bytes) == headerLen and bytes == self._VALID_HEADER):
 			raise InvalidHeader('Invalid header')
 
-	def checkPassword(self, password):
-		mac = hmac.new(self.filepart['passphraseHmacKey'], password, hashlib.sha1)
-		if mac.digest() == self.filepart['passphraseHmacResult']:
+	def check_password(self, password):
+		mac = hmac.new(
+				self.filepart['passHmacKey'],
+				password,
+				hashlib.sha1)
+		if mac.digest() == self.filepart['passHmacResult']:
 			sha1 = hashlib.sha1()
 			sha1.update(password)
-			self.hashedPassphrase = sha1.digest().ljust(32, chr(0x00))
+			self.hashedPass = sha1.digest().ljust(32, chr(0x00))
 		else:
-			raise PasswordMismatch('Password Mismatch')
+			raise PasswordMismatchError('Password Mismatch')
 
 	def decrypt(self):
-		decryptedPrivateKeySpec = self.aesDecrypt(self.hashedPassphrase, self.filepart['encryptedPrivateKeySpec'])
+		decryptedPrivateKeySpec = self.aes_decrypt(
+				self.hashedPass,
+				self.filepart['encPrivKeySpec'])
 
-		rsaPrivateKey = Crypto.PublicKey.RSA.importKey(decryptedPrivateKeySpec)
-		rsaPublicKey = Crypto.PublicKey.RSA.importKey(self.filepart['publicKey'])
+		rsaPrivateKey = Crypto.PublicKey.RSA.importKey(
+				decryptedPrivateKeySpec)
+		rsaPublicKey = Crypto.PublicKey.RSA.importKey(
+				self.filepart['publicKey'])
 		cipher = Crypto.Cipher.PKCS1_v1_5.new(rsaPrivateKey)
-		decryptedSessionKey = cipher.decrypt(self.filepart['encryptedSessionKeySpec'], None)
-		decryptedData = self.aesDecrypt(decryptedSessionKey, self.filepart['encryptedData'])
+		decryptedSessionKey = cipher.decrypt(
+				self.filepart['encSessionKeySpec'],
+				None)
+		decryptedData = self.aes_decrypt(
+				decryptedSessionKey,
+				self.filepart['encData'])
 
 		return decryptedData
 
-	def readFile(self):
+	def read_file(self):
 		try:
 			with open(self.filename, 'r') as f:
-				(header, passphraseHmacKey, passphraseHmacResult,
-					publicKey, encryptedPrivateKey, encryptedSessionKey,
-					encryptedData) = f.read().split('\n', 6)
+				(header, passHmacKey,
+				passHmacResult, publicKey,
+				encPrivKeySpec, encSessionKey,
+				encData) = f.read().split('\n', 6)
 		except:
 			raise
 
 		self.filepart = {
-				'header':			header,
-				'passphraseHmacKey':		base64.b64decode(passphraseHmacKey),
-				'passphraseHmacResult':		base64.b64decode(passphraseHmacResult),
-				'publicKey':			base64.b64decode(publicKey),
-				'encryptedPrivateKeySpec':	base64.b64decode(encryptedPrivateKey),
-				'encryptedSessionKeySpec':	base64.b64decode(encryptedSessionKey),
-				'encryptedData':		encryptedData
-				}
+			'header': header,
+			'passHmacKey': base64.b64decode(passHmacKey),
+			'passHmacResult': base64.b64decode(passHmacResult),
+			'publicKey': base64.b64decode(publicKey),
+			'encPrivKeySpec': base64.b64decode(encPrivKeySpec),
+			'encSessionKeySpec': base64.b64decode(encSessionKey),
+			'encData': encData
+			}
 
-	def pkcs5Unpad(self, data):
+	def pkcs5_unpad(self, data):
 		unpad = lambda d: d[0:-ord(d[-1])]
 		return unpad(data)
 
 def fixSysPath():
 	# Search local directories first.
-	index = [i for i, p in enumerate(sys.path) if os.path.expanduser('~') in p]
+	index = [i for i, p in enumerate(sys.path)
+			if os.path.expanduser('~') in p]
 	for newindex, oldindex in enumerate(index):
 		sys.path.insert(newindex, sys.path.pop(oldindex))
 
@@ -161,20 +177,22 @@ def main(ARGV):
 
 	try:
 		password = getpass.getpass()
-		encryptedFile.checkPassword(password)
-	except PasswordMismatch as e:
+		encryptedFile.check_password(password)
+	except PasswordMismatchError as e:
 		return "Error: {e}".format(e=e)
 
 	decryptedFile = encryptedFile.decrypt()
 
 	try:
-		decryptedFilename = "decrypted-{filename}".format(filename=os.path.basename(filename))
+		decryptedFilename = "decrypted-{filename}".format(
+				filename = os.path.basename(filename))
 		with open(decryptedFilename, 'w') as f:
 			f.write(decryptedFile)
 	except IOError as e:
 		return "Error while attempting to write decrypted file: {e}".format(e=e)
 
-	print("Success. Decrypted file '{decryptedFilename}' written.".format(decryptedFilename=decryptedFilename))
+	print("Success. Decrypted file '{decryptedFilename}' written.".format(
+		decryptedFilename=decryptedFilename))
 
 	return 0
 
