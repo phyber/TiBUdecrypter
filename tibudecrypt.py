@@ -94,6 +94,8 @@ class TiBUFile:
 		IV is 16 bytes of 0x00 as specified by Titanium.
 		Performs PKCS5 unpadding when required.
 		"""
+		# bytes are already treated as arrays of integers in python 3,
+		# so converting with ord() isn't required.
 		if sys.version_info[0] < 3:
 			compat = ord
 		else:
