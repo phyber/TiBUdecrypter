@@ -95,10 +95,10 @@ class TiBUFile:
 	def check_header(self):
 		headerLen = len(self._VALID_HEADER)
 		with open(self.filename) as f:
-			bytes = f.read(headerLen)
+			data = f.read(headerLen)
 
-		if not (len(bytes) == headerLen
-			and bytes == self._VALID_HEADER):
+		if not (len(data) == headerLen
+			and data == self._VALID_HEADER):
 			raise InvalidHeader('Invalid header')
 
 	def check_password(self, password):
@@ -120,8 +120,9 @@ class TiBUFile:
 
 		rsaPrivateKey = Crypto.PublicKey.RSA.importKey(
 				decryptedPrivateKeySpec)
-		rsaPublicKey = Crypto.PublicKey.RSA.importKey(
-				self.filepart['publicKey'])
+		# Public key isn't used for decryption.
+		#rsaPublicKey = Crypto.PublicKey.RSA.importKey(
+		#		self.filepart['publicKey'])
 		cipher = Crypto.Cipher.PKCS1_v1_5.new(rsaPrivateKey)
 		decryptedSessionKey = cipher.decrypt(
 				self.filepart['encSessionKeySpec'],
@@ -163,9 +164,9 @@ def fixSysPath():
 	for newindex, oldindex in enumerate(index):
 		sys.path.insert(newindex, sys.path.pop(oldindex))
 
-def main(ARGV):
+def main(args):
 	try:
-		filename = ARGV[1]
+		filename = args[1]
 	except:
 		return "Supply a file to decrypt."
 
@@ -194,8 +195,6 @@ def main(ARGV):
 
 	print("Success. Decrypted file '{decryptedFilename}' written.".format(
 		decryptedFilename=decryptedFilename))
-
-	return 0
 
 if __name__ == '__main__':
 	sys.exit(main(sys.argv))
