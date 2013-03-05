@@ -65,7 +65,6 @@ import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 import Crypto.Util.asn1
 
-VALID_HEADER = 'TB_ARMOR_V1'
 
 class InvalidHeader(Exception):
 	def __init__(self, message):
@@ -79,58 +78,79 @@ class PasswordMismatch(Exception):
 	def __str__(self):
 		return self.message
 
+class TiBUFile:
+	def __init__(self, filename):
+		self.__VALID_HEADER = 'TB_ARMOR_V1'
+		self.filename = filename
+		self.checkHeader()
+		self.readFile()
+
+	def aesDecrypt(self, key, data):
+		IV = ''.ljust(16, chr(0x00))
+		dec = Crypto.Cipher.AES.new(key, mode=Crypto.Cipher.AES.MODE_CBC, IV=IV)
+		decrypted = dec.decrypt(data)
+		return decrypted
+
+	def checkHeader(self):
+		headerLen = len(self.__VALID_HEADER)
+		with open(self.filename) as f:
+			bytes = f.read(headerLen)
+
+		if not (len(bytes) == headerLen and bytes == self.__VALID_HEADER):
+			raise InvalidHeader('Invalid header')
+
+	def checkPassword(self, password):
+		mac = hmac.new(self.filepart['passphraseHmacKey'], password, hashlib.sha1)
+		if mac.digest() == self.filepart['passphraseHmacResult']:
+			sha1 = hashlib.sha1()
+			sha1.update(password)
+			self.hashedPassphrase = sha1.digest().ljust(32, chr(0x00))
+		else:
+			raise PasswordMismatch('Password Mismatch')
+
+	def decrypt(self):
+		decryptedPrivateKeySpec = self.aesDecrypt(self.hashedPassphrase, self.filepart['encryptedPrivateKeySpec'])
+
+		# we have extra bytes (TiBU padding data for some reason?), use a try block
+		# for the decode.
+		try:
+			privateKeySpecDER = Crypto.Util.asn1.DerSequence()
+			privateKeySpecDER.decode(decryptedPrivateKeySpec)
+		except ValueError as e:
+			pass
+
+		rsaPrivateKey = Crypto.PublicKey.RSA.importKey(privateKeySpecDER.encode())
+		rsaPublicKey = Crypto.PublicKey.RSA.importKey(self.filepart['publicKey'])
+		cipher = Crypto.Cipher.PKCS1_v1_5.new(rsaPrivateKey)
+		decryptedSessionKey = cipher.decrypt(self.filepart['encryptedSessionKeySpec'], None)
+		decryptedData = self.aesDecrypt(decryptedSessionKey, self.filepart['encryptedData'])
+
+		return decryptedData
+
+	def readFile(self):
+		try:
+			with open(self.filename, 'r') as f:
+				(header, passphraseHmacKey, passphraseHmacResult,
+					publicKey, encryptedPrivateKey, encryptedSessionKey,
+					encryptedData) = f.read().split('\n', 6)
+		except:
+			raise
+
+		self.filepart = {
+				'header':			header,
+				'passphraseHmacKey':		base64.b64decode(passphraseHmacKey),
+				'passphraseHmacResult':		base64.b64decode(passphraseHmacResult),
+				'publicKey':			base64.b64decode(publicKey),
+				'encryptedPrivateKeySpec':	base64.b64decode(encryptedPrivateKey),
+				'encryptedSessionKeySpec':	base64.b64decode(encryptedSessionKey),
+				'encryptedData':		encryptedData
+				}
+
 def fixSysPath():
 	# Search local directories first.
 	index = [i for i, p in enumerate(sys.path) if os.path.expanduser('~') in p]
 	for newindex, oldindex in enumerate(index):
 		sys.path.insert(newindex, sys.path.pop(oldindex))
-
-def checkHeader(f):
-	headerLen = len(VALID_HEADER)
-	bytes = f.read(headerLen)
-
-	if len(bytes) == headerLen and bytes == VALID_HEADER:
-		f.seek(0, 0)
-	else:
-		raise InvalidHeader('Invalid header')
-
-def readFile(filename):
-	try:
-		with open(filename, 'r') as f:
-			checkHeader(f)
-			(header, passphraseHmacKey, passphraseHmacResult,
-				publicKey, encryptedPrivateKey, encryptedSessionKey,
-				data) = f.read().split('\n', 6)
-	except:
-		raise
-
-	return {
-			'header':		header,
-			'passphraseHmacKey':	base64.b64decode(passphraseHmacKey),
-			'passphraseHmacResult':	base64.b64decode(passphraseHmacResult),
-			'publicKey':		base64.b64decode(publicKey),
-			'encryptedPrivateKey':	base64.b64decode(encryptedPrivateKey),
-			'encryptedSessionKey':	base64.b64decode(encryptedSessionKey),
-			'data':			data
-			}
-
-def aesDecrypt(passphrase, data):
-	IV = ''.ljust(16, chr(0x00))
-	dec = Crypto.Cipher.AES.new(passphrase, mode=Crypto.Cipher.AES.MODE_CBC, IV=IV)
-	decrypted = dec.decrypt(data)
-	return decrypted
-
-def checkPassword(password, fileparts):
-	mac = hmac.new(fileparts.get('passphraseHmacKey'), password, hashlib.sha1)
-	if mac.digest() == fileparts.get('passphraseHmacResult'):
-		sha1 = hashlib.sha1()
-		sha1.update(password)
-		hashedPassphrase = sha1.digest().ljust(32, chr(0x00))
-	else:
-		raise PasswordMismatch('Password Mismatch')
-		#sys.exit("Password mismatch", 1)
-	
-	return hashedPassphrase
 
 def main(ARGV):
 	try:
@@ -138,39 +158,31 @@ def main(ARGV):
 	except:
 		return "Supply a file to decrypt."
 
-	#fixSysPath()
 	try:
-		fileparts = readFile(filename)
+		encryptedFile = TiBUFile(filename)
 	except InvalidHeader as e:
-		return "{e}".format(e=e)
+		return "Error. Not a Titanium Backup encrypted file: {e}".format(e=e)
 	except IOError as e:
-		return "{e}".format(e=e)
-
-	password = getpass.getpass()
+		return "Error. {e}".format(e=e)
 
 	try:
-		hashedPassphrase = checkPassword(password, fileparts)
+		password = getpass.getpass()
+		encryptedFile.checkPassword(password)
 	except PasswordMismatch as e:
-		return "{e}".format(e=e)
+		return "Error: {e}".format(e=e)
 
-	decryptedPrivateKeySpec = aesDecrypt(hashedPassphrase, fileparts.get('encryptedPrivateKey'))
+	decryptedFile = encryptedFile.decrypt()
 
-	# we have extra bytes (TiBU padding data for some reason?), use a try block
-	# for the decode.
 	try:
-		privateKeySpecDER = Crypto.Util.asn1.DerSequence()
-		privateKeySpecDER.decode(decryptedPrivateKeySpec)
-	except ValueError as e:
-		pass
+		decryptedFilename = "decrypted-{filename}".format(filename=os.path.basename(filename))
+		with open(decryptedFilename, 'w') as f:
+			f.write(decryptedFile)
+	except IOError as e:
+		return "Error while attempting to write decrypted file: {e}".format(e=e)
 
-	rsaPrivateKey = Crypto.PublicKey.RSA.importKey(privateKeySpecDER.encode())
-	rsaPublicKey = Crypto.PublicKey.RSA.importKey(fileparts.get('publicKey'))
-	cipher = Crypto.Cipher.PKCS1_v1_5.new(rsaPrivateKey)
-	decryptedSessionKey = cipher.decrypt(fileparts.get('encryptedSessionKey'), None)
-	decryptedData = aesDecrypt(decryptedSessionKey, fileparts.get('data'))
+	print("Success. Decrypted file '{decryptedFilename}' written.".format(decryptedFilename=decryptedFilename))
 
-	with open('decrypted-{filename}'.format(filename=filename), 'w') as f:
-		f.write(decryptedData)
+	return 0
 
 if __name__ == '__main__':
 	sys.exit(main(sys.argv))
