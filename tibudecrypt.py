@@ -63,8 +63,6 @@ import hmac
 import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
-import Crypto.Util.asn1
-
 
 class InvalidHeader(Exception):
 	def __init__(self, message):
@@ -89,7 +87,7 @@ class TiBUFile:
 		IV = ''.ljust(16, chr(0x00))
 		dec = Crypto.Cipher.AES.new(key, mode=Crypto.Cipher.AES.MODE_CBC, IV=IV)
 		decrypted = dec.decrypt(data)
-		return decrypted
+		return self.pkcs5_unpad(decrypted)
 
 	def checkHeader(self):
 		headerLen = len(self.__VALID_HEADER)
@@ -111,15 +109,7 @@ class TiBUFile:
 	def decrypt(self):
 		decryptedPrivateKeySpec = self.aesDecrypt(self.hashedPassphrase, self.filepart['encryptedPrivateKeySpec'])
 
-		# we have extra bytes (TiBU padding data for some reason?), use a try block
-		# for the decode.
-		try:
-			privateKeySpecDER = Crypto.Util.asn1.DerSequence()
-			privateKeySpecDER.decode(decryptedPrivateKeySpec)
-		except ValueError as e:
-			pass
-
-		rsaPrivateKey = Crypto.PublicKey.RSA.importKey(privateKeySpecDER.encode())
+		rsaPrivateKey = Crypto.PublicKey.RSA.importKey(decryptedPrivateKeySpec)
 		rsaPublicKey = Crypto.PublicKey.RSA.importKey(self.filepart['publicKey'])
 		cipher = Crypto.Cipher.PKCS1_v1_5.new(rsaPrivateKey)
 		decryptedSessionKey = cipher.decrypt(self.filepart['encryptedSessionKeySpec'], None)
@@ -145,6 +135,10 @@ class TiBUFile:
 				'encryptedSessionKeySpec':	base64.b64decode(encryptedSessionKey),
 				'encryptedData':		encryptedData
 				}
+
+	def pkcs5_unpad(self, data):
+		unpad = lambda d: d[0:-ord(d[-1])]
+		return unpad(data)
 
 def fixSysPath():
 	# Search local directories first.
