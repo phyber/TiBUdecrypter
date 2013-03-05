@@ -64,6 +64,13 @@ import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 
+# bytes are already treated as arrays of integers in python 3,
+# so converting with ord() isn't required.
+if sys.version_info[0] < 3:
+	pkcs5_unpad = lambda d: d[0:-ord(d[-1])]
+else:
+	pkcs5_unpad = lambda d: d[0:-d[-1]]
+
 class InvalidHeader(Exception):
 	"""
 	Raised when the header for a file doesn't match a valid
@@ -94,14 +101,6 @@ class TiBUFile:
 		IV is 16 bytes of 0x00 as specified by Titanium.
 		Performs PKCS5 unpadding when required.
 		"""
-		# bytes are already treated as arrays of integers in python 3,
-		# so converting with ord() isn't required.
-		if sys.version_info[0] < 3:
-			compat = ord
-		else:
-			compat = int
-
-		pkcs5_unpad = lambda d: d[0:-compat(d[-1])]
 		iv = 16 * chr(0x00)
 		dec = Crypto.Cipher.AES.new(
 				key,
