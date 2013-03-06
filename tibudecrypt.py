@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 # File Format
 # Information taken from Christian Egger's G+ page.
 # https://plus.google.com/101760059763010172705/posts/MQBmYhKDex5
