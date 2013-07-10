@@ -83,9 +83,9 @@ class PasswordMismatchError(Exception):
 	(hmac digest doesn't match expected digest)
 	"""
 
-class TiBUFile:
+class TiBUFile(object):
 	"""
-	Class for performing decryption on Titanium Backup encrypred files.
+	Class for performing decryption on Titanium Backup encrypted files.
 	"""
 	def __init__(self, filename):
 		self._VALID_HEADER = 'TB_ARMOR_V1'
