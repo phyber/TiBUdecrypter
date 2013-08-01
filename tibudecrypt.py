@@ -122,8 +122,8 @@ class TiBUFile(object):
         raises the InvalidHeader exception if there is no match.
         """
         header_len = len(self._VALID_HEADER)
-        with open(self.filename, 'rb') as f:
-            data = f.read(header_len).decode('utf-8')
+        with open(self.filename, 'rb') as in_file:
+            data = in_file.read(header_len).decode('utf-8')
 
         if not (len(data) == header_len
                 and data == self._VALID_HEADER):
@@ -176,11 +176,11 @@ class TiBUFile(object):
         we're interested in.
         """
         try:
-            with open(self.filename, 'rb') as f:
+            with open(self.filename, 'rb') as in_file:
                 (header, pass_hmac_key,
                  pass_hmac_result, public_key,
                  enc_privkey_spec, enc_sesskey_spec,
-                 enc_data) = f.read().split(b'\n', 6)
+                 enc_data) = in_file.read().split(b'\n', 6)
         except:
             raise
 
@@ -198,32 +198,32 @@ class TiBUFile(object):
 def main(args):
     try:
         filename = args[1]
-    except:
+    except NameError:
         return "Supply a file to decrypt."
 
     try:
         encrypted_file = TiBUFile(filename)
-    except InvalidHeader as e:
-        return "Not a Titanium Backup encrypted file: {e}".format(e=e)
-    except IOError as e:
-        return "Error. {e}".format(e=e)
+    except InvalidHeader as exc:
+        return "Not a Titanium Backup encrypted file: {e}".format(e=exc)
+    except IOError as exc:
+        return "Error. {e}".format(e=exc)
 
     try:
         password = getpass.getpass()
         encrypted_file.check_password(bytes(password.encode('utf-8')))
-    except PasswordMismatchError as e:
-        return "Error: {e}".format(e=e)
+    except PasswordMismatchError as exc:
+        return "Error: {e}".format(e=exc)
 
     decrypted_file = encrypted_file.decrypt()
 
     try:
         decrypted_filename = "decrypted-{filename}".format(
             filename=os.path.basename(filename))
-        with open(decrypted_filename, 'wb') as f:
-            f.write(decrypted_file)
-    except IOError as e:
+        with open(decrypted_filename, 'wb') as out_file:
+            out_file.write(decrypted_file)
+    except IOError as exc:
         return "Error while writing decrypted data: {e}".format(
-            e=e.strerror)
+            e=exc.strerror)
 
     print("Success. Decrypted file '{decrypted_filename}' written.".format(
         decrypted_filename=decrypted_filename))
