@@ -83,6 +83,21 @@ def pkcs5_unpad(data):
         return data[0:-data[-1]]
 
 
+def aes_decrypt(key, data):
+    """
+    Decrypt AES encrypted data.
+    IV is 16 bytes of 0x00 as specified by Titanium.
+    Performs PKCS5 unpadding when required.
+    """
+    iv = 16 * chr(0x00)
+    dec = Crypto.Cipher.AES.new(
+        key,
+        mode=Crypto.Cipher.AES.MODE_CBC,
+        IV=iv)
+    decrypted = dec.decrypt(data)
+    return pkcs5_unpad(decrypted)
+
+
 class InvalidHeader(Exception):
     """
     Raised when the header for a file doesn't match a valid
@@ -108,20 +123,6 @@ class TiBUFile(object):
         self.filename = filename
         self.check_header()
         self.read_file()
-
-    def aes_decrypt(self, key, data):
-        """
-        Decrypt AES encrypted data.
-        IV is 16 bytes of 0x00 as specified by Titanium.
-        Performs PKCS5 unpadding when required.
-        """
-        iv = 16 * chr(0x00)
-        dec = Crypto.Cipher.AES.new(
-            key,
-            mode=Crypto.Cipher.AES.MODE_CBC,
-            IV=iv)
-        decrypted = dec.decrypt(data)
-        return pkcs5_unpad(decrypted)
 
     def check_header(self):
         """
@@ -158,7 +159,7 @@ class TiBUFile(object):
         Decrypts the encrypted data using the private keys provided
         in the encrypted Titanium Backup file.
         """
-        dec_privkey_spec = self.aes_decrypt(
+        dec_privkey_spec = aes_decrypt(
             self.hashed_pass,
             self.filepart['enc_privkey_spec'])
 
@@ -171,7 +172,7 @@ class TiBUFile(object):
         dec_sesskey = cipher.decrypt(
             self.filepart['enc_sesskey_spec'],
             None)
-        decrypted_data = self.aes_decrypt(
+        decrypted_data = aes_decrypt(
             dec_sesskey,
             self.filepart['enc_data'])
 
