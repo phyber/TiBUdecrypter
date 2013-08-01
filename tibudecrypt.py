@@ -56,24 +56,29 @@
 #
 # ./tibudecrypt.py filename
 
+from __future__ import print_function
 import os
 import sys
 import base64
 import getpass
 import hashlib
 import hmac
+import six
 import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 
-# bytes are already treated as arrays of integers in python 3,
-# so converting with ord() isn't required.
-if sys.version_info[0] < 3:
-    def pkcs5_unpad(d):
-        return d[0:-ord(d[-1])]
-else:
-    def pkcs5_unpad(d):
-        return d[0:-d[-1]]
+
+def pkcs5_unpad(data):
+    """Return data after PKCS5 unpadding
+
+    With python3 bytes are already treated as arrays of ints so
+    we don't have to convert them with ord.
+    """
+    if not six.PY3:
+        return data[0:-ord(data[-1])]
+    else:
+        return data[0:-data[-1]]
 
 
 class InvalidHeader(Exception):
