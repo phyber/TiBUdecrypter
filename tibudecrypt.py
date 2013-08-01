@@ -28,8 +28,10 @@
 #
 #Then we build the KeyPair object as follows:
 # KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-# PrivateKey privateKey2 = keyFactory.generatePrivate(new PKCS8EncodedKeySpec(privateKey));
-# PublicKey public_key2 = keyFactory.generatePublic(new X509EncodedKeySpec(public_key));
+# PrivateKey privateKey2 = keyFactory.generatePrivate(
+#   new PKCS8EncodedKeySpec(privateKey));
+# PublicKey public_key2 = keyFactory.generatePublic(
+#   new X509EncodedKeySpec(public_key));
 # KeyPair keyPair = new KeyPair(public_key2, privateKey2);
 #
 #Then we decrypt the session key as follows:
@@ -73,17 +75,20 @@ else:
     def pkcs5_unpad(d):
         return d[0:-d[-1]]
 
+
 class InvalidHeader(Exception):
     """
     Raised when the header for a file doesn't match a valid
     Titanium Backup header.
     """
 
+
 class PasswordMismatchError(Exception):
     """
     Raised when the given password is incorrect
     (hmac digest doesn't match expected digest)
     """
+
 
 class TiBUFile(object):
     """
@@ -105,9 +110,9 @@ class TiBUFile(object):
         """
         iv = 16 * chr(0x00)
         dec = Crypto.Cipher.AES.new(
-                key,
-                mode=Crypto.Cipher.AES.MODE_CBC,
-                IV=iv)
+            key,
+            mode=Crypto.Cipher.AES.MODE_CBC,
+            IV=iv)
         decrypted = dec.decrypt(data)
         return pkcs5_unpad(decrypted)
 
@@ -121,7 +126,7 @@ class TiBUFile(object):
             data = f.read(header_len).decode('utf-8')
 
         if not (len(data) == header_len
-            and data == self._VALID_HEADER):
+                and data == self._VALID_HEADER):
             raise InvalidHeader('Invalid header')
 
     def check_password(self, password):
@@ -136,7 +141,8 @@ class TiBUFile(object):
         if mac.digest() == self.filepart['pass_hmac_result']:
             sha1 = hashlib.sha1()
             sha1.update(password)
-            self.hashed_pass = sha1.digest().ljust(32, bytes(chr(0x00).encode('ascii')))
+            self.hashed_pass = sha1.digest().ljust(
+                32, bytes(chr(0x00).encode('ascii')))
         else:
             raise PasswordMismatchError('Password Mismatch')
 
@@ -172,9 +178,9 @@ class TiBUFile(object):
         try:
             with open(self.filename, 'rb') as f:
                 (header, pass_hmac_key,
-                pass_hmac_result, public_key,
-                enc_privkey_spec, enc_sesskey_spec,
-                enc_data) = f.read().split(b'\n', 6)
+                 pass_hmac_result, public_key,
+                 enc_privkey_spec, enc_sesskey_spec,
+                 enc_data) = f.read().split(b'\n', 6)
         except:
             raise
 
@@ -186,7 +192,8 @@ class TiBUFile(object):
             'enc_privkey_spec': base64.b64decode(enc_privkey_spec),
             'enc_sesskey_spec': base64.b64decode(enc_sesskey_spec),
             'enc_data': enc_data
-            }
+        }
+
 
 def main(args):
     try:
@@ -211,7 +218,7 @@ def main(args):
 
     try:
         decrypted_filename = "decrypted-{filename}".format(
-            filename = os.path.basename(filename))
+            filename=os.path.basename(filename))
         with open(decrypted_filename, 'wb') as f:
             f.write(decrypted_file)
     except IOError as e:
