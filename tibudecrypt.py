@@ -32,9 +32,9 @@
 # PublicKey public_key2 = keyFactory.generatePublic(new X509EncodedKeySpec(public_key));
 # KeyPair keyPair = new KeyPair(public_key2, privateKey2);
 #
-#Then we decrypt the session key as follows: 
+#Then we decrypt the session key as follows:
 # Cipher rsaDecrypt = Cipher.getInstance("RSA/NONE/PKCS1Padding");
-# rsaDecrypt.init(Cipher.DECRYPT_MODE, keyPair.getPrivate()); 
+# rsaDecrypt.init(Cipher.DECRYPT_MODE, keyPair.getPrivate());
 # ByteArrayOutputStream baos = new ByteArrayOutputStream();
 # CipherOutputStream cos = new CipherOutputStream(baos, rsaDecrypt);
 # cos.write(enc_sesskey_spec); cos.close();
@@ -67,157 +67,159 @@ import Crypto.PublicKey.RSA
 # bytes are already treated as arrays of integers in python 3,
 # so converting with ord() isn't required.
 if sys.version_info[0] < 3:
-	pkcs5_unpad = lambda d: d[0:-ord(d[-1])]
+    def pkcs5_unpad(d):
+        return d[0:-ord(d[-1])]
 else:
-	pkcs5_unpad = lambda d: d[0:-d[-1]]
+    def pkcs5_unpad(d):
+        return d[0:-d[-1]]
 
 class InvalidHeader(Exception):
-	"""
-	Raised when the header for a file doesn't match a valid
-	Titanium Backup header.
-	"""
+    """
+    Raised when the header for a file doesn't match a valid
+    Titanium Backup header.
+    """
 
 class PasswordMismatchError(Exception):
-	"""
-	Raised when the given password is incorrect
-	(hmac digest doesn't match expected digest)
-	"""
+    """
+    Raised when the given password is incorrect
+    (hmac digest doesn't match expected digest)
+    """
 
 class TiBUFile(object):
-	"""
-	Class for performing decryption on Titanium Backup encrypted files.
-	"""
-	def __init__(self, filename):
-		self._VALID_HEADER = 'TB_ARMOR_V1'
-		self.hashed_pass = None
-		self.filepart = None
-		self.filename = filename
-		self.check_header()
-		self.read_file()
+    """
+    Class for performing decryption on Titanium Backup encrypted files.
+    """
+    def __init__(self, filename):
+        self._VALID_HEADER = 'TB_ARMOR_V1'
+        self.hashed_pass = None
+        self.filepart = None
+        self.filename = filename
+        self.check_header()
+        self.read_file()
 
-	def aes_decrypt(self, key, data):
-		"""
-		Decrypt AES encrypted data.
-		IV is 16 bytes of 0x00 as specified by Titanium.
-		Performs PKCS5 unpadding when required.
-		"""
-		iv = 16 * chr(0x00)
-		dec = Crypto.Cipher.AES.new(
-				key,
-				mode=Crypto.Cipher.AES.MODE_CBC,
-				IV=iv)
-		decrypted = dec.decrypt(data)
-		return pkcs5_unpad(decrypted)
+    def aes_decrypt(self, key, data):
+        """
+        Decrypt AES encrypted data.
+        IV is 16 bytes of 0x00 as specified by Titanium.
+        Performs PKCS5 unpadding when required.
+        """
+        iv = 16 * chr(0x00)
+        dec = Crypto.Cipher.AES.new(
+                key,
+                mode=Crypto.Cipher.AES.MODE_CBC,
+                IV=iv)
+        decrypted = dec.decrypt(data)
+        return pkcs5_unpad(decrypted)
 
-	def check_header(self):
-		"""
-		Checks that the file header matches the Titanium Armor header
-		raises the InvalidHeader exception if there is no match.
-		"""
-		header_len = len(self._VALID_HEADER)
-		with open(self.filename, 'rb') as f:
-			data = f.read(header_len).decode('utf-8')
+    def check_header(self):
+        """
+        Checks that the file header matches the Titanium Armor header
+        raises the InvalidHeader exception if there is no match.
+        """
+        header_len = len(self._VALID_HEADER)
+        with open(self.filename, 'rb') as f:
+            data = f.read(header_len).decode('utf-8')
 
-		if not (len(data) == header_len
-			and data == self._VALID_HEADER):
-			raise InvalidHeader('Invalid header')
+        if not (len(data) == header_len
+            and data == self._VALID_HEADER):
+            raise InvalidHeader('Invalid header')
 
-	def check_password(self, password):
-		"""
-		Performs HMAC password verification and hashes the password
-		for use when decrypting the private key and session key.
-		"""
-		mac = hmac.new(
-				self.filepart['pass_hmac_key'],
-				bytes(password),
-				hashlib.sha1)
-		if mac.digest() == self.filepart['pass_hmac_result']:
-			sha1 = hashlib.sha1()
-			sha1.update(password)
-			self.hashed_pass = sha1.digest().ljust(32, bytes(chr(0x00).encode('ascii')))
-		else:
-			raise PasswordMismatchError('Password Mismatch')
+    def check_password(self, password):
+        """
+        Performs HMAC password verification and hashes the password
+        for use when decrypting the private key and session key.
+        """
+        mac = hmac.new(
+            self.filepart['pass_hmac_key'],
+            bytes(password),
+            hashlib.sha1)
+        if mac.digest() == self.filepart['pass_hmac_result']:
+            sha1 = hashlib.sha1()
+            sha1.update(password)
+            self.hashed_pass = sha1.digest().ljust(32, bytes(chr(0x00).encode('ascii')))
+        else:
+            raise PasswordMismatchError('Password Mismatch')
 
-	def decrypt(self):
-		"""
-		Decrypts the encrypted data using the private keys provided
-		in the encrypted Titanium Backup file.
-		"""
-		dec_privkey_spec = self.aes_decrypt(
-				self.hashed_pass,
-				self.filepart['enc_privkey_spec'])
+    def decrypt(self):
+        """
+        Decrypts the encrypted data using the private keys provided
+        in the encrypted Titanium Backup file.
+        """
+        dec_privkey_spec = self.aes_decrypt(
+            self.hashed_pass,
+            self.filepart['enc_privkey_spec'])
 
-		rsa_privkey = Crypto.PublicKey.RSA.importKey(
-				dec_privkey_spec)
-		# Public key isn't used for decryption.
-		#rsaPublicKey = Crypto.PublicKey.RSA.importKey(
-		#		self.filepart['public_key'])
-		cipher = Crypto.Cipher.PKCS1_v1_5.new(rsa_privkey)
-		dec_sesskey = cipher.decrypt(
-				self.filepart['enc_sesskey_spec'],
-				None)
-		decrypted_data = self.aes_decrypt(
-				dec_sesskey,
-				self.filepart['enc_data'])
+        rsa_privkey = Crypto.PublicKey.RSA.importKey(
+            dec_privkey_spec)
+        # Public key isn't used for decryption.
+        #rsaPublicKey = Crypto.PublicKey.RSA.importKey(
+        #        self.filepart['public_key'])
+        cipher = Crypto.Cipher.PKCS1_v1_5.new(rsa_privkey)
+        dec_sesskey = cipher.decrypt(
+            self.filepart['enc_sesskey_spec'],
+            None)
+        decrypted_data = self.aes_decrypt(
+            dec_sesskey,
+            self.filepart['enc_data'])
 
-		return decrypted_data
+        return decrypted_data
 
-	def read_file(self):
-		"""
-		Reads the encrypted file and splits out the 7 sections that
-		we're interested in.
-		"""
-		try:
-			with open(self.filename, 'rb') as f:
-				(header, pass_hmac_key,
-				pass_hmac_result, public_key,
-				enc_privkey_spec, enc_sesskey_spec,
-				enc_data) = f.read().split(b'\n', 6)
-		except:
-			raise
+    def read_file(self):
+        """
+        Reads the encrypted file and splits out the 7 sections that
+        we're interested in.
+        """
+        try:
+            with open(self.filename, 'rb') as f:
+                (header, pass_hmac_key,
+                pass_hmac_result, public_key,
+                enc_privkey_spec, enc_sesskey_spec,
+                enc_data) = f.read().split(b'\n', 6)
+        except:
+            raise
 
-		self.filepart = {
-			'header': header,
-			'pass_hmac_key': base64.b64decode(pass_hmac_key),
-			'pass_hmac_result': base64.b64decode(pass_hmac_result),
-			'public_key': base64.b64decode(public_key),
-			'enc_privkey_spec': base64.b64decode(enc_privkey_spec),
-			'enc_sesskey_spec': base64.b64decode(enc_sesskey_spec),
-			'enc_data': enc_data
-			}
+        self.filepart = {
+            'header': header,
+            'pass_hmac_key': base64.b64decode(pass_hmac_key),
+            'pass_hmac_result': base64.b64decode(pass_hmac_result),
+            'public_key': base64.b64decode(public_key),
+            'enc_privkey_spec': base64.b64decode(enc_privkey_spec),
+            'enc_sesskey_spec': base64.b64decode(enc_sesskey_spec),
+            'enc_data': enc_data
+            }
 
 def main(args):
-	try:
-		filename = args[1]
-	except:
-		return "Supply a file to decrypt."
+    try:
+        filename = args[1]
+    except:
+        return "Supply a file to decrypt."
 
-	try:
-		encrypted_file = TiBUFile(filename)
-	except InvalidHeader as e:
-		return "Not a Titanium Backup encrypted file: {e}".format(e=e)
-	except IOError as e:
-		return "Error. {e}".format(e=e)
+    try:
+        encrypted_file = TiBUFile(filename)
+    except InvalidHeader as e:
+        return "Not a Titanium Backup encrypted file: {e}".format(e=e)
+    except IOError as e:
+        return "Error. {e}".format(e=e)
 
-	try:
-		password = getpass.getpass()
-		encrypted_file.check_password(bytes(password.encode('utf-8')))
-	except PasswordMismatchError as e:
-		return "Error: {e}".format(e=e)
+    try:
+        password = getpass.getpass()
+        encrypted_file.check_password(bytes(password.encode('utf-8')))
+    except PasswordMismatchError as e:
+        return "Error: {e}".format(e=e)
 
-	decrypted_file = encrypted_file.decrypt()
+    decrypted_file = encrypted_file.decrypt()
 
-	try:
-		decrypted_filename = "decrypted-{filename}".format(
-				filename = os.path.basename(filename))
-		with open(decrypted_filename, 'wb') as f:
-			f.write(decrypted_file)
-	except IOError as e:
-		return "Error while writing decrypted data: {e}".format(
-				e=e.strerror)
+    try:
+        decrypted_filename = "decrypted-{filename}".format(
+            filename = os.path.basename(filename))
+        with open(decrypted_filename, 'wb') as f:
+            f.write(decrypted_file)
+    except IOError as e:
+        return "Error while writing decrypted data: {e}".format(
+            e=e.strerror)
 
-	print("Success. Decrypted file '{decrypted_filename}' written.".format
-			(decrypted_filename=decrypted_filename))
+    print("Success. Decrypted file '{decrypted_filename}' written.".format(
+        decrypted_filename=decrypted_filename))
 
 if __name__ == '__main__':
-	sys.exit(main(sys.argv))
+    sys.exit(main(sys.argv))
