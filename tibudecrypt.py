@@ -84,13 +84,11 @@ def pkcs5_unpad(data):
         return data[0:-data[-1]]
 
 
-def aes_decrypt(key, data):
+def aes_decrypt(iv, key, data):
     """
     Decrypt AES encrypted data.
-    IV is 16 bytes of 0x00 as specified by Titanium.
     Performs PKCS5 unpadding when required.
     """
-    iv = 16 * chr(0x00)
     dec = Crypto.Cipher.AES.new(
         key,
         mode=Crypto.Cipher.AES.MODE_CBC,
@@ -119,6 +117,7 @@ class TiBUFile(object):
     """
     def __init__(self, filename):
         self._VALID_HEADER = 'TB_ARMOR_V1'
+        self._IV = 16 * chr(0x00)
         self.hashed_pass = None
         self.filepart = None
         self.filename = filename
@@ -161,6 +160,7 @@ class TiBUFile(object):
         in the encrypted Titanium Backup file.
         """
         dec_privkey_spec = aes_decrypt(
+            self._IV,
             self.hashed_pass,
             self.filepart['enc_privkey_spec'])
 
@@ -174,6 +174,7 @@ class TiBUFile(object):
             self.filepart['enc_sesskey_spec'],
             None)
         decrypted_data = aes_decrypt(
+            self._IV,
             dec_sesskey,
             self.filepart['enc_data'])
 
