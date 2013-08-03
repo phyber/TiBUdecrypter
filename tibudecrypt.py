@@ -59,6 +59,7 @@ Then we decrypt the session key as follows:
 """
 
 from __future__ import print_function
+from __future__ import unicode_literals
 import os
 import sys
 import base64
@@ -144,13 +145,13 @@ class TiBUFile(object):
         """
         mac = hmac.new(
             self.filepart['pass_hmac_key'],
-            bytes(password),
+            password,
             hashlib.sha1)
         if mac.digest() == self.filepart['pass_hmac_result']:
             sha1 = hashlib.sha1()
             sha1.update(password)
             self.hashed_pass = sha1.digest().ljust(
-                32, bytes(chr(0x00).encode('ascii')))
+                32, chr(0x00).encode('ascii'))
         else:
             raise PasswordMismatchError('Password Mismatch')
 
@@ -218,7 +219,7 @@ def main(args):
 
     try:
         password = getpass.getpass()
-        encrypted_file.check_password(bytes(password.encode('utf-8')))
+        encrypted_file.check_password(password.encode('utf-8'))
     except PasswordMismatchError as exc:
         return "Error: {e}".format(e=exc)
 
