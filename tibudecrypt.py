@@ -264,6 +264,10 @@ def main(args):
     print("Success. Decrypted file '{decrypted_filename}' written.".format(
         decrypted_filename=decrypted_filename))
 
+    print("consider now running the following to verify the decrypted file WITHOUT writing bytes to disk:\n")
+    print("gunzip --stdout '{decrypted_filename}' | tar tf - >/dev/null; [[ 0 == $? ]] && echo 'gunzip and tar test successful' || echo 'there was an error testing the decrypted archive'".format(decrypted_filename=decrypted_filename))
+    print("\nit will test the gzip archive, e.g. for corruption or any garbage bytes, and then test the tar for errors.")
+
 if __name__ == '__main__':
     ARGS = docopt.docopt(__doc__, version=VERSION)
     sys.exit(main(ARGS))
