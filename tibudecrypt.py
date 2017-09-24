@@ -94,16 +94,24 @@ TB_VALID_HEADER = 'TB_ARMOR_V1'
 VERSION = '0.1'
 
 
-def pkcs5_unpad(data):
+def pkcs5_unpad(chunk):
     """Return data after PKCS5 unpadding
-
     With python3 bytes are already treated as arrays of ints so
     we don't have to convert them with ord.
     """
     if not six.PY3:
-        return data[0:-ord(data[-1])]
+        padding_length = ord(chunk[-1])
     else:
-        return data[0:-data[-1]]
+        padding_length = chunk[-1]
+    
+    # cite https://stackoverflow.com/a/20457519
+    if padding_length < 1 or padding_length > Crypto.Cipher.AES.block_size:
+       raise ValueError("bad decrypt pad (%d)" % padding_length)
+    # all the pad-bytes must be the same
+    if chunk[-padding_length:] != (padding_length * chr(padding_length)):
+       # this is similar to the bad decrypt:evp_enc.c from openssl program
+       raise ValueError("bad decrypt")
+    return chunk[:-padding_length]
 
 
 def aes_decrypt(iv, key):
@@ -144,11 +152,11 @@ class TiBUFile(object):
         self.pass_hmac_result = None
         self.enc_privkey_spec = None
         self.enc_sesskey_spec = None
-        self.enc_data = None
         self.encrypted_data_start_byte_offset = None
         self.hashed_pass = None
         self.check_header()
         self.read_file()
+        #self.setup_crypto()
 
     def check_header(self):
         """
@@ -180,6 +188,31 @@ class TiBUFile(object):
         else:
             raise PasswordMismatchError('Password Mismatch')
 
+
+    def read_file(self):
+        """
+        Reads the encrypted file and splits out the 7 sections that
+        we're interested in.
+        """
+        try:
+            with open(self.filename, 'rb') as in_file:
+                in_file.readline() # skip the header
+                pass_hmac_key = in_file.readline()
+                pass_hmac_result = in_file.readline()
+                in_file.readline() # dummy public key
+                enc_privkey_spec = in_file.readline()
+                enc_sesskey_spec = in_file.readline()
+
+                self.encrypted_data_start_byte_offset = in_file.tell()
+                in_file.close()
+    
+            self.pass_hmac_key = base64.b64decode(pass_hmac_key)
+            self.pass_hmac_result = base64.b64decode(pass_hmac_result)
+            self.enc_privkey_spec = base64.b64decode(enc_privkey_spec)
+            self.enc_sesskey_spec = base64.b64decode(enc_sesskey_spec)
+        except:
+            raise
+
     def decrypt(self):
         """
         Decrypts the encrypted data using the private keys provided
@@ -205,31 +238,6 @@ class TiBUFile(object):
 
         return km_aes 
 
-    def read_file(self):
-        """
-        Reads the encrypted file and splits out the 7 sections that
-        we're interested in.
-        """
-        try:
-            with open(self.filename, 'rb') as in_file:
-                in_file.readline() # skip the header
-                pass_hmac_key = in_file.readline() # skip the header
-                pass_hmac_result = in_file.readline()
-                in_file.readline() # dummy public key
-                enc_privkey_spec = in_file.readline()
-                enc_sesskey_spec = in_file.readline()
-
-                self.encrypted_data_start_byte_offset = in_file.tell()
-                in_file.close()
-        except:
-            raise
-
-        self.pass_hmac_key = base64.b64decode(pass_hmac_key)
-        self.pass_hmac_result = base64.b64decode(pass_hmac_result)
-        self.enc_privkey_spec = base64.b64decode(enc_privkey_spec)
-        self.enc_sesskey_spec = base64.b64decode(enc_sesskey_spec)
-
-
 def main(args):
     """Main"""
     try:
@@ -254,28 +262,19 @@ def main(args):
 
     decrypted_file = encrypted_file.decrypt()
 
-    print(encrypted_file.encrypted_data_start_byte_offset)
-
     try:
         decrypted_filename = "decrypted-{filename}".format(
             filename=os.path.basename(filename))
 
         with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
-            bs = Crypto.Cipher.AES.block_size
+            bs = Crypto.Cipher.AES.block_size # delete me
             next_chunk = ''
             finished = False
             in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
             while not finished:
                 chunk, next_chunk = next_chunk, decrypted_file.decrypt(in_file.read(1024 * bs))
-                if len(next_chunk) == 0:
-                    padding_length = ord(chunk[-1])
-                    if padding_length < 1 or padding_length > bs:
-                       raise ValueError("bad decrypt pad (%d)" % padding_length)
-                    # all the pad-bytes must be the same
-                    if chunk[-padding_length:] != (padding_length * chr(padding_length)):
-                       # this is similar to the bad decrypt:evp_enc.c from openssl program
-                       raise ValueError("bad decrypt")
-                    chunk = chunk[:-padding_length]
+                if len(next_chunk) == 0: # ensure last chunk is padded correctly
+                    chunk = pkcs5_unpad(chunk)
                     finished = True
                 out_file.write(chunk)
 
