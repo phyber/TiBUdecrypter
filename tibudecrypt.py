@@ -89,8 +89,6 @@ import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 
-from functools import partial
-
 TIBU_IV = chr(0x00) * 16
 TB_VALID_HEADER = 'TB_ARMOR_V1'
 VERSION = '0.1'
@@ -265,10 +263,10 @@ def main(args):
         with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
             bs = Crypto.Cipher.AES.block_size
             next_chunk = ''
+            finished = False
             in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
-            for next_chunk in iter(in_file.read(1024 * bs), ''):
-                next_chunk = decrypted_file.decrypt(next_chunk)
-                chunk = next_chunk
+            while not finished:
+                chunk, next_chunk = next_chunk, decrypted_file.decrypt(in_file.read(1024 * bs))
                 if len(next_chunk) == 0:
                     padding_length = ord(chunk[-1])
                     if padding_length < 1 or padding_length > bs:
@@ -278,6 +276,7 @@ def main(args):
                        # this is similar to the bad decrypt:evp_enc.c from openssl program
                        raise ValueError("bad decrypt")
                     chunk = chunk[:-padding_length]
+                    finished = True
                 out_file.write(chunk)
 
 
