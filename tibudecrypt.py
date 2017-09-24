@@ -89,6 +89,8 @@ import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 
+from functools import partial
+
 TIBU_IV = chr(0x00) * 16
 TB_VALID_HEADER = 'TB_ARMOR_V1'
 VERSION = '0.1'
@@ -145,6 +147,7 @@ class TiBUFile(object):
         self.enc_privkey_spec = None
         self.enc_sesskey_spec = None
         self.enc_data = None
+        self.encrypted_data_start_byte_offset = None
         self.hashed_pass = None
         self.check_header()
         self.read_file()
@@ -211,10 +214,15 @@ class TiBUFile(object):
         """
         try:
             with open(self.filename, 'rb') as in_file:
-                (dummy_header, pass_hmac_key,
-                 pass_hmac_result, dummy_public_key,
-                 enc_privkey_spec, enc_sesskey_spec,
-                 enc_data) = in_file.read().split(b'\n', 6)
+                in_file.readline() # skip the header
+                pass_hmac_key = in_file.readline() # skip the header
+                pass_hmac_result = in_file.readline()
+                in_file.readline() # dummy public key
+                enc_privkey_spec = in_file.readline()
+                enc_sesskey_spec = in_file.readline()
+
+                self.encrypted_data_start_byte_offset = in_file.tell()
+                in_file.close()
         except:
             raise
 
@@ -222,7 +230,6 @@ class TiBUFile(object):
         self.pass_hmac_result = base64.b64decode(pass_hmac_result)
         self.enc_privkey_spec = base64.b64decode(enc_privkey_spec)
         self.enc_sesskey_spec = base64.b64decode(enc_sesskey_spec)
-        self.enc_data = enc_data
 
 
 def main(args):
@@ -249,19 +256,19 @@ def main(args):
 
     decrypted_file = encrypted_file.decrypt()
 
+    print(encrypted_file.encrypted_data_start_byte_offset)
+
     try:
         decrypted_filename = "decrypted-{filename}".format(
             filename=os.path.basename(filename))
-        cyphertext_filename = "{filename}-cyphertext".format(
-            filename=os.path.basename(filename))
-        print(decrypted_filename, cyphertext_filename)
-        with open(cyphertext_filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
-            #out_file.write(pkcs5_unpad(decrypted_file.decrypt(encrypted_file.enc_data)))
+
+        with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
             bs = Crypto.Cipher.AES.block_size
             next_chunk = ''
-            finished = False
-            while not finished:
-                chunk, next_chunk = next_chunk, decrypted_file.decrypt(in_file.read(1024 * bs))
+            in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
+            for next_chunk in iter(in_file.read(1024 * bs), ''):
+                next_chunk = decrypted_file.decrypt(next_chunk)
+                chunk = next_chunk
                 if len(next_chunk) == 0:
                     padding_length = ord(chunk[-1])
                     if padding_length < 1 or padding_length > bs:
@@ -271,7 +278,6 @@ def main(args):
                        # this is similar to the bad decrypt:evp_enc.c from openssl program
                        raise ValueError("bad decrypt")
                     chunk = chunk[:-padding_length]
-                    finished = True
                 out_file.write(chunk)
 
 
