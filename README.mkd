@@ -8,7 +8,9 @@ Requirements
 
  * Python 2.7 (might work with other versions, but was developed with this)
  * PyCrypto
-	* Specifically the pkcs8 branch from https://github.com/Legrandin/pycrypto
+   * Specifically the pkcs8 branch from https://github.com/Legrandin/pycrypto
+ * `docopt`
+ * `six`
 
 
 Todo
