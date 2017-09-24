@@ -106,7 +106,7 @@ def pkcs5_unpad(data):
         return data[0:-data[-1]]
 
 
-def aes_decrypt(iv, key, data):
+def aes_decrypt(iv, key):
     """
     Decrypt AES encrypted data.
     Performs PKCS5 unpadding when required.
@@ -115,8 +115,9 @@ def aes_decrypt(iv, key, data):
         key,
         mode=Crypto.Cipher.AES.MODE_CBC,
         IV=iv)
-    decrypted = dec.decrypt(data)
-    return pkcs5_unpad(decrypted)
+    return dec
+    #decrypted = dec.decrypt(data)
+    #return pkcs5_unpad(decrypted)
 
 
 class InvalidHeader(Exception):
@@ -183,10 +184,10 @@ class TiBUFile(object):
         Decrypts the encrypted data using the private keys provided
         in the encrypted Titanium Backup file.
         """
-        dec_privkey_spec = aes_decrypt(
-            TIBU_IV,
-            self.hashed_pass,
-            self.enc_privkey_spec)
+        #decrypted = dec.decrypt(data)
+        #return pkcs5_unpad(decrypted)
+        km_aes = aes_decrypt(TIBU_IV, self.hashed_pass)
+        dec_privkey_spec = pkcs5_unpad(km_aes.decrypt(self.enc_privkey_spec))
 
         rsa_privkey = Crypto.PublicKey.RSA.importKey(
             dec_privkey_spec)
@@ -194,12 +195,14 @@ class TiBUFile(object):
         dec_sesskey = cipher.decrypt(
             self.enc_sesskey_spec,
             None)
-        decrypted_data = aes_decrypt(
-            TIBU_IV,
-            dec_sesskey,
-            self.enc_data)
 
-        return decrypted_data
+        km_aes = aes_decrypt(TIBU_IV, dec_sesskey)
+        #decrypted_data = aes_decrypt(
+        #    TIBU_IV,
+        #    dec_sesskey,
+        #    self.enc_data)
+
+        return km_aes 
 
     def read_file(self):
         """
@@ -249,8 +252,29 @@ def main(args):
     try:
         decrypted_filename = "decrypted-{filename}".format(
             filename=os.path.basename(filename))
-        with open(decrypted_filename, 'wb') as out_file:
-            out_file.write(decrypted_file)
+        cyphertext_filename = "{filename}-cyphertext".format(
+            filename=os.path.basename(filename))
+        print(decrypted_filename, cyphertext_filename)
+        with open(cyphertext_filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
+            #out_file.write(pkcs5_unpad(decrypted_file.decrypt(encrypted_file.enc_data)))
+            bs = Crypto.Cipher.AES.block_size
+            next_chunk = ''
+            finished = False
+            while not finished:
+                chunk, next_chunk = next_chunk, decrypted_file.decrypt(in_file.read(1024 * bs))
+                if len(next_chunk) == 0:
+                    padding_length = ord(chunk[-1])
+                    if padding_length < 1 or padding_length > bs:
+                       raise ValueError("bad decrypt pad (%d)" % padding_length)
+                    # all the pad-bytes must be the same
+                    if chunk[-padding_length:] != (padding_length * chr(padding_length)):
+                       # this is similar to the bad decrypt:evp_enc.c from openssl program
+                       raise ValueError("bad decrypt")
+                    chunk = chunk[:-padding_length]
+                    finished = True
+                out_file.write(chunk)
+
+
     except IOError as exc:
         return "Error while writing decrypted data: {e}".format(
             e=exc.strerror)
