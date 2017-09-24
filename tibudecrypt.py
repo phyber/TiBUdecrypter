@@ -113,21 +113,6 @@ def pkcs5_unpad(chunk):
        raise ValueError("bad decrypt")
     return chunk[:-padding_length]
 
-
-def aes_decrypt(iv, key):
-    """
-    Decrypt AES encrypted data.
-    Performs PKCS5 unpadding when required.
-    """
-    dec = Crypto.Cipher.AES.new(
-        key,
-        mode=Crypto.Cipher.AES.MODE_CBC,
-        IV=iv)
-    return dec
-    #decrypted = dec.decrypt(data)
-    #return pkcs5_unpad(decrypted)
-
-
 class InvalidHeader(Exception):
     """
     Raised when the header for a file doesn't match a valid
@@ -154,9 +139,9 @@ class TiBUFile(object):
         self.enc_sesskey_spec = None
         self.encrypted_data_start_byte_offset = None
         self.hashed_pass = None
+        self.cipher = None
         self.check_header()
         self.read_file()
-        #self.setup_crypto()
 
     def check_header(self):
         """
@@ -187,7 +172,7 @@ class TiBUFile(object):
                 32, chr(0x00).encode('ascii'))
         else:
             raise PasswordMismatchError('Password Mismatch')
-
+        self.setup_crypto()
 
     def read_file(self):
         """
@@ -213,15 +198,14 @@ class TiBUFile(object):
         except:
             raise
 
-    def decrypt(self):
-        """
-        Decrypts the encrypted data using the private keys provided
-        in the encrypted Titanium Backup file.
-        """
-        #decrypted = dec.decrypt(data)
-        #return pkcs5_unpad(decrypted)
-        km_aes = aes_decrypt(TIBU_IV, self.hashed_pass)
-        dec_privkey_spec = pkcs5_unpad(km_aes.decrypt(self.enc_privkey_spec))
+    def setup_crypto(self):
+        #import pdb; pdb.set_trace()
+        cipher = Crypto.Cipher.AES.new(
+            self.hashed_pass,
+            mode=Crypto.Cipher.AES.MODE_CBC,
+            IV=TIBU_IV)
+
+        dec_privkey_spec = pkcs5_unpad(cipher.decrypt(self.enc_privkey_spec))
 
         rsa_privkey = Crypto.PublicKey.RSA.importKey(
             dec_privkey_spec)
@@ -230,13 +214,10 @@ class TiBUFile(object):
             self.enc_sesskey_spec,
             None)
 
-        km_aes = aes_decrypt(TIBU_IV, dec_sesskey)
-        #decrypted_data = aes_decrypt(
-        #    TIBU_IV,
-        #    dec_sesskey,
-        #    self.enc_data)
-
-        return km_aes 
+        self.cipher = Crypto.Cipher.AES.new(
+            dec_sesskey,
+            mode=Crypto.Cipher.AES.MODE_CBC,
+            IV=TIBU_IV)
 
 def main(args):
     """Main"""
@@ -260,19 +241,16 @@ def main(args):
     except PasswordMismatchError as exc:
         return "Error: {e}".format(e=exc)
 
-    decrypted_file = encrypted_file.decrypt()
-
     try:
         decrypted_filename = "decrypted-{filename}".format(
             filename=os.path.basename(filename))
 
         with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
-            bs = Crypto.Cipher.AES.block_size # delete me
             next_chunk = ''
             finished = False
             in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
             while not finished:
-                chunk, next_chunk = next_chunk, decrypted_file.decrypt(in_file.read(1024 * bs))
+                chunk, next_chunk = next_chunk, encrypted_file.cipher.decrypt(in_file.read(1024 * Crypto.Cipher.AES.block_size))
                 if len(next_chunk) == 0: # ensure last chunk is padded correctly
                     chunk = pkcs5_unpad(chunk)
                     finished = True
