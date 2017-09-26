@@ -258,6 +258,9 @@ def main(args):
     print("Success. Decrypted file '{decrypted_filename}' written.".format(
         decrypted_filename=decrypted_filename))
 
-if __name__ == '__main__':
+def _main():
     ARGS = docopt.docopt(__doc__, version=VERSION)
     sys.exit(main(ARGS))
+
+if __name__ == '__main__':
+    _main()
