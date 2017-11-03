@@ -103,15 +103,16 @@ def pkcs5_unpad(chunk):
         padding_length = ord(chunk[-1])
     else:
         padding_length = chunk[-1]
-    
+
     # cite https://stackoverflow.com/a/20457519
     if padding_length < 1 or padding_length > Crypto.Cipher.AES.block_size:
-       raise ValueError("bad decrypt pad (%d)" % padding_length)
+        raise ValueError("bad decrypt pad (%d)" % padding_length)
     # all the pad-bytes must be the same
     if chunk[-padding_length:] != (padding_length * chr(padding_length)):
-       # this is similar to the bad decrypt:evp_enc.c from openssl program
-       raise ValueError("bad decrypt")
+        # this is similar to the bad decrypt:evp_enc.c from openssl program
+        raise ValueError("bad decrypt")
     return chunk[:-padding_length]
+
 
 class InvalidHeader(Exception):
     """
@@ -181,16 +182,16 @@ class TiBUFile(object):
         """
         try:
             with open(self.filename, 'rb') as in_file:
-                in_file.readline() # skip the header
+                in_file.readline()  # skip the header
                 pass_hmac_key = in_file.readline()
                 pass_hmac_result = in_file.readline()
-                in_file.readline() # dummy public key
+                in_file.readline()  # dummy public key
                 enc_privkey_spec = in_file.readline()
                 enc_sesskey_spec = in_file.readline()
 
                 self.encrypted_data_start_byte_offset = in_file.tell()
                 in_file.close()
-    
+
             self.pass_hmac_key = base64.b64decode(pass_hmac_key)
             self.pass_hmac_result = base64.b64decode(pass_hmac_result)
             self.enc_privkey_spec = base64.b64decode(enc_privkey_spec)
@@ -199,7 +200,6 @@ class TiBUFile(object):
             raise
 
     def setup_crypto(self):
-        #import pdb; pdb.set_trace()
         cipher = Crypto.Cipher.AES.new(
             self.hashed_pass,
             mode=Crypto.Cipher.AES.MODE_CBC,
@@ -218,6 +218,7 @@ class TiBUFile(object):
             dec_sesskey,
             mode=Crypto.Cipher.AES.MODE_CBC,
             IV=TIBU_IV)
+
 
 def main(args):
     """Main"""
@@ -251,11 +252,13 @@ def main(args):
             in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
             while not finished:
                 chunk, next_chunk = next_chunk, encrypted_file.cipher.decrypt(in_file.read(1024 * Crypto.Cipher.AES.block_size))
-                if len(next_chunk) == 0: # ensure last chunk is padded correctly
+
+                # ensure last chunk is padded correctly
+                if len(next_chunk) == 0:
                     chunk = pkcs5_unpad(chunk)
                     finished = True
-                out_file.write(chunk)
 
+                out_file.write(chunk)
 
     except IOError as exc:
         return "Error while writing decrypted data: {e}".format(
@@ -267,6 +270,7 @@ def main(args):
     print("consider now running the following to verify the decrypted file WITHOUT writing bytes to disk:\n")
     print("gunzip --stdout '{decrypted_filename}' | tar tf - >/dev/null; [[ 0 == $? ]] && echo 'gunzip and tar test successful' || echo 'there was an error testing the decrypted archive'".format(decrypted_filename=decrypted_filename))
     print("\nit will test the gzip archive, e.g. for corruption or any garbage bytes, and then test the tar for errors.")
+
 
 if __name__ == '__main__':
     ARGS = docopt.docopt(__doc__, version=VERSION)
