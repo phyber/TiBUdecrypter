@@ -250,19 +250,23 @@ def main(args):
             filename=os.path.basename(filename))
 
         with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
-            next_chunk = ''
+            next_chunk = None
             finished = False
             in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
+
             while not finished:
                 chunk, next_chunk = next_chunk, encrypted_file.cipher.decrypt(in_file.read(1024 * Crypto.Cipher.AES.block_size))
 
-                # ensure last chunk is padded correctly
+                # On the first iteration, we won't have a chunk. Skip it.
+                if chunk is None:
+                    continue
+
+                # Ensure last chunk is padded correctly
                 if len(next_chunk) == 0:
                     chunk = pkcs5_unpad(chunk)
                     finished = True
 
                 out_file.write(chunk)
-
     except IOError as exc:
         return "Error while writing decrypted data: {e}".format(
             e=exc.strerror)
