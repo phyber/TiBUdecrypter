@@ -94,30 +94,24 @@ TB_VALID_HEADER = 'TB_ARMOR_V1'
 VERSION = '0.1'
 
 
-def pkcs5_unpad(data):
+def pkcs5_unpad(chunk):
     """Return data after PKCS5 unpadding
-
     With python3 bytes are already treated as arrays of ints so
     we don't have to convert them with ord.
     """
     if not six.PY3:
-        return data[0:-ord(data[-1])]
+        padding_length = ord(chunk[-1])
     else:
-        return data[0:-data[-1]]
-
-
-def aes_decrypt(iv, key, data):
-    """
-    Decrypt AES encrypted data.
-    Performs PKCS5 unpadding when required.
-    """
-    dec = Crypto.Cipher.AES.new(
-        key,
-        mode=Crypto.Cipher.AES.MODE_CBC,
-        IV=iv)
-    decrypted = dec.decrypt(data)
-    return pkcs5_unpad(decrypted)
-
+        padding_length = chunk[-1]
+    
+    # cite https://stackoverflow.com/a/20457519
+    if padding_length < 1 or padding_length > Crypto.Cipher.AES.block_size:
+       raise ValueError("bad decrypt pad (%d)" % padding_length)
+    # all the pad-bytes must be the same
+    if chunk[-padding_length:] != (padding_length * chr(padding_length)):
+       # this is similar to the bad decrypt:evp_enc.c from openssl program
+       raise ValueError("bad decrypt")
+    return chunk[:-padding_length]
 
 class InvalidHeader(Exception):
     """
@@ -143,8 +137,9 @@ class TiBUFile(object):
         self.pass_hmac_result = None
         self.enc_privkey_spec = None
         self.enc_sesskey_spec = None
-        self.enc_data = None
+        self.encrypted_data_start_byte_offset = None
         self.hashed_pass = None
+        self.cipher = None
         self.check_header()
         self.read_file()
 
@@ -177,29 +172,7 @@ class TiBUFile(object):
                 32, chr(0x00).encode('ascii'))
         else:
             raise PasswordMismatchError('Password Mismatch')
-
-    def decrypt(self):
-        """
-        Decrypts the encrypted data using the private keys provided
-        in the encrypted Titanium Backup file.
-        """
-        dec_privkey_spec = aes_decrypt(
-            TIBU_IV,
-            self.hashed_pass,
-            self.enc_privkey_spec)
-
-        rsa_privkey = Crypto.PublicKey.RSA.importKey(
-            dec_privkey_spec)
-        cipher = Crypto.Cipher.PKCS1_v1_5.new(rsa_privkey)
-        dec_sesskey = cipher.decrypt(
-            self.enc_sesskey_spec,
-            None)
-        decrypted_data = aes_decrypt(
-            TIBU_IV,
-            dec_sesskey,
-            self.enc_data)
-
-        return decrypted_data
+        self.setup_crypto()
 
     def read_file(self):
         """
@@ -208,19 +181,43 @@ class TiBUFile(object):
         """
         try:
             with open(self.filename, 'rb') as in_file:
-                (dummy_header, pass_hmac_key,
-                 pass_hmac_result, dummy_public_key,
-                 enc_privkey_spec, enc_sesskey_spec,
-                 enc_data) = in_file.read().split(b'\n', 6)
+                in_file.readline() # skip the header
+                pass_hmac_key = in_file.readline()
+                pass_hmac_result = in_file.readline()
+                in_file.readline() # dummy public key
+                enc_privkey_spec = in_file.readline()
+                enc_sesskey_spec = in_file.readline()
+
+                self.encrypted_data_start_byte_offset = in_file.tell()
+                in_file.close()
+    
+            self.pass_hmac_key = base64.b64decode(pass_hmac_key)
+            self.pass_hmac_result = base64.b64decode(pass_hmac_result)
+            self.enc_privkey_spec = base64.b64decode(enc_privkey_spec)
+            self.enc_sesskey_spec = base64.b64decode(enc_sesskey_spec)
         except:
             raise
 
-        self.pass_hmac_key = base64.b64decode(pass_hmac_key)
-        self.pass_hmac_result = base64.b64decode(pass_hmac_result)
-        self.enc_privkey_spec = base64.b64decode(enc_privkey_spec)
-        self.enc_sesskey_spec = base64.b64decode(enc_sesskey_spec)
-        self.enc_data = enc_data
+    def setup_crypto(self):
+        #import pdb; pdb.set_trace()
+        cipher = Crypto.Cipher.AES.new(
+            self.hashed_pass,
+            mode=Crypto.Cipher.AES.MODE_CBC,
+            IV=TIBU_IV)
 
+        dec_privkey_spec = pkcs5_unpad(cipher.decrypt(self.enc_privkey_spec))
+
+        rsa_privkey = Crypto.PublicKey.RSA.importKey(
+            dec_privkey_spec)
+        cipher = Crypto.Cipher.PKCS1_v1_5.new(rsa_privkey)
+        dec_sesskey = cipher.decrypt(
+            self.enc_sesskey_spec,
+            None)
+
+        self.cipher = Crypto.Cipher.AES.new(
+            dec_sesskey,
+            mode=Crypto.Cipher.AES.MODE_CBC,
+            IV=TIBU_IV)
 
 def main(args):
     """Main"""
@@ -244,19 +241,32 @@ def main(args):
     except PasswordMismatchError as exc:
         return "Error: {e}".format(e=exc)
 
-    decrypted_file = encrypted_file.decrypt()
-
     try:
         decrypted_filename = "decrypted-{filename}".format(
             filename=os.path.basename(filename))
-        with open(decrypted_filename, 'wb') as out_file:
-            out_file.write(decrypted_file)
+
+        with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
+            next_chunk = ''
+            finished = False
+            in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
+            while not finished:
+                chunk, next_chunk = next_chunk, encrypted_file.cipher.decrypt(in_file.read(1024 * Crypto.Cipher.AES.block_size))
+                if len(next_chunk) == 0: # ensure last chunk is padded correctly
+                    chunk = pkcs5_unpad(chunk)
+                    finished = True
+                out_file.write(chunk)
+
+
     except IOError as exc:
         return "Error while writing decrypted data: {e}".format(
             e=exc.strerror)
 
     print("Success. Decrypted file '{decrypted_filename}' written.".format(
         decrypted_filename=decrypted_filename))
+
+    print("consider now running the following to verify the decrypted file WITHOUT writing bytes to disk:\n")
+    print("gunzip --stdout '{decrypted_filename}' | tar tf - >/dev/null; [[ 0 == $? ]] && echo 'gunzip and tar test successful' || echo 'there was an error testing the decrypted archive'".format(decrypted_filename=decrypted_filename))
+    print("\nit will test the gzip archive, e.g. for corruption or any garbage bytes, and then test the tar for errors.")
 
 if __name__ == '__main__':
     ARGS = docopt.docopt(__doc__, version=VERSION)
