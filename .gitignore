@@ -3,3 +3,6 @@
 *.gz
 *.log
 *.bin
+build/
+dist/
+*.egg-info/

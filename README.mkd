@@ -11,6 +11,10 @@ Requirements
  * `docopt`
  * `six`
 
+Installation
+------------
+
+`setup.py` will take care of installing the mentioned dependencies.
 
 Todo
 ----
