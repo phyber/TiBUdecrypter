@@ -33,6 +33,20 @@ import Crypto.PublicKey.RSA
 TIBU_IV = chr(0x00).encode('ascii') * Crypto.Cipher.AES.block_size
 TB_VALID_HEADER = 'TB_ARMOR_V1'
 VERSION = '0.1'
+SUCCESS_MESSAGE = """
+Success. Decrypted file '{decrypted_filename}' written.
+
+Consider now running the following to verify the decrypted file WITHOUT writing
+bytes to disk:
+
+gunzip --stdout '{decrypted_filename}' >/dev/null \\
+    ; [[ 0 == $? ]] \\
+    && echo 'gunzip test successful' \\
+    || echo 'There was an error testing the decrypted archive'
+
+It will test the gzip archive, e.g. for corruption or any garbage bytes, and
+then test the tar for errors.
+"""
 
 
 def pkcs5_unpad(chunk):
@@ -232,12 +246,7 @@ def main(args):
         return "Error while writing decrypted data: {e}".format(
             e=exc.strerror)
 
-    print("Success. Decrypted file '{decrypted_filename}' written.".format(
-        decrypted_filename=decrypted_filename))
-
-    print("consider now running the following to verify the decrypted file WITHOUT writing bytes to disk:\n")
-    print("gunzip --stdout '{decrypted_filename}' | tar tf - >/dev/null; [[ 0 == $? ]] && echo 'gunzip and tar test successful' || echo 'there was an error testing the decrypted archive'".format(decrypted_filename=decrypted_filename))
-    print("\nit will test the gzip archive, e.g. for corruption or any garbage bytes, and then test the tar for errors.")
+    print(SUCCESS_MESSAGE.format(decrypted_filename=decrypted_filename))
 
 
 if __name__ == '__main__':
