@@ -16,6 +16,12 @@ Installation
 
 `setup.py` will take care of installing the mentioned dependencies.
 
+File Format
+-----------
+
+Information on the Titanium Backup file format can be found under the `docs/`
+directory, [here](docs/FORMAT.md).
+
 Todo
 ----
 
