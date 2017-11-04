@@ -6,7 +6,7 @@ Decrypt your Titanium Backup files on the command line.
 Requirements
 ------------
 
- * Python 2.7 (might work with other versions, but was developed with this)
+ * Python 3 or Python 2.7
  * `pycryptodome`
  * `docopt`
  * `six`
