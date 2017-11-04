@@ -18,14 +18,15 @@ Options:
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import os
-import sys
 import base64
+import binascii
+import docopt
 import getpass
 import hashlib
 import hmac
-import docopt
+import os
 import six
+import sys
 import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
@@ -162,7 +163,10 @@ class TiBUFile(object):
             self.pass_hmac_result = base64.b64decode(pass_hmac_result)
             self.enc_privkey_spec = base64.b64decode(enc_privkey_spec)
             self.enc_sesskey_spec = base64.b64decode(enc_sesskey_spec)
-        except:
+        except binascii.Error:
+            # Raised if the b64decode fails.
+            raise
+        except IOError:
             raise
 
     def setup_crypto(self):
