@@ -30,7 +30,7 @@ import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 
-TIBU_IV = chr(0x00).encode('ascii') * 16
+TIBU_IV = chr(0x00).encode('ascii') * Crypto.Cipher.AES.block_size
 TB_VALID_HEADER = 'TB_ARMOR_V1'
 VERSION = '0.1'
 
