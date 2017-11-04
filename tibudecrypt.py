@@ -45,8 +45,7 @@ gunzip --stdout '{decrypted_filename}' >/dev/null \\
     && echo 'gunzip test successful' \\
     || echo 'There was an error testing the decrypted archive'
 
-It will test the gzip archive, e.g. for corruption or any garbage bytes, and
-then test the tar for errors.
+It will test the gzip archive, e.g. for corruption or any garbage bytes.
 """
 
 
