@@ -30,6 +30,7 @@ import Crypto.Cipher.AES
 import Crypto.Cipher.PKCS1_v1_5
 import Crypto.PublicKey.RSA
 
+CHUNK_READ_SIZE = 1024 * Crypto.Cipher.AES.block_size
 TIBU_IV = chr(0x00).encode('ascii') * Crypto.Cipher.AES.block_size
 TB_VALID_HEADER = 'TB_ARMOR_V1'
 VERSION = '0.1'
@@ -229,7 +230,7 @@ def main(args):
 
             while not finished:
                 # Read and decrypt a chunk of encrypted data.
-                enc_data = in_file.read(1024 * Crypto.Cipher.AES.block_size)
+                enc_data = in_file.read(CHUNK_READ_SIZE)
                 chunk, next_chunk = next_chunk, encrypted_file.cipher.decrypt(enc_data)
 
                 # On the first iteration, we won't have a chunk. Skip it.
