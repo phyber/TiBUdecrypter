@@ -62,7 +62,8 @@ def pkcs5_unpad(chunk):
 
     # Cite https://stackoverflow.com/a/20457519
     if padding_length < 1 or padding_length > Crypto.Cipher.AES.block_size:
-        raise ValueError("bad decrypt pad (%d)" % padding_length)
+        raise ValueError("bad decrypt pad ({padding_length:d})".format(
+            padding_length=padding_length))
 
     # all the pad-bytes must be the same
     expected_bytes = chr(padding_length).encode('ascii') * padding_length
