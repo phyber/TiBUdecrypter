@@ -99,7 +99,7 @@ class TiBUFile(object):
         self.pass_hmac_result = None
         self.enc_privkey_spec = None
         self.enc_sesskey_spec = None
-        self.encrypted_data_start_byte_offset = None
+        self.data_offset = None
         self.hashed_pass = None
         self.cipher = None
         self.check_header()
@@ -155,7 +155,7 @@ class TiBUFile(object):
                 enc_privkey_spec = in_file.readline()
                 enc_sesskey_spec = in_file.readline()
 
-                self.encrypted_data_start_byte_offset = in_file.tell()
+                self.data_offset = in_file.tell()
                 in_file.close()
 
             # All of the above are base64 encoded, decode them.
@@ -230,7 +230,7 @@ def main(args):
         with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
             next_chunk = None
             finished = False
-            in_file.seek(encrypted_file.encrypted_data_start_byte_offset, 0)
+            in_file.seek(encrypted_file.data_offset, 0)
 
             while not finished:
                 # Read and decrypt a chunk of encrypted data.
