@@ -24,6 +24,7 @@ import docopt
 import getpass
 import hashlib
 import hmac
+import io
 import os
 import six
 import sys
@@ -230,7 +231,7 @@ def main(args):
         with open(encrypted_file.filename, 'rb') as in_file, open(decrypted_filename, 'wb') as out_file:
             next_chunk = None
             finished = False
-            in_file.seek(encrypted_file.data_offset, 0)
+            in_file.seek(encrypted_file.data_offset, io.SEEK_SET)
 
             while not finished:
                 # Read and decrypt a chunk of encrypted data.
